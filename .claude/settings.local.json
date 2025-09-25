@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(lsof:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(PORT=3001 npm start)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

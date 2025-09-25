@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { FPSMonitor } from './FPSMonitor';
 import { CanvasVideo } from './CanvasVideo';
+import sampleVideo from '../assets/14429259_3840_2160_60fps.mp4';
 
 const CarouselContainer = styled.div`
   position: relative;
@@ -19,6 +20,13 @@ const VideoElement = styled.div`
   width: 100%;
   height: 100%;
   position: relative;
+`;
+
+const VideoFile = styled.video`
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
 `;
 
 const PlayPauseButton = styled.button`
@@ -83,6 +91,20 @@ const VideoInfo = styled.div`
   font-family: monospace;
 `;
 
+const VideoError = styled.div`
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(255, 0, 0, 0.8);
+  color: white;
+  padding: 20px;
+  border-radius: 8px;
+  font-family: monospace;
+  text-align: center;
+  z-index: 20;
+`;
+
 const VideoCounter = styled.div`
   position: absolute;
   top: 20px;
@@ -95,18 +117,24 @@ const VideoCounter = styled.div`
 `;
 
 interface Video {
-  pattern: 'gradient' | 'checkerboard' | 'wave' | 'particles';
+  pattern: 'gradient' | 'checkerboard' | 'wave' | 'particles' | 'file';
   title: string;
+  src?: string;
 }
 
 // Sample high-FPS video patterns for demonstration
 const sampleVideos: Video[] = [
   {
+    pattern: 'file',
+    title: 'Real 60 FPS Video',
+    src: sampleVideo
+  },
+  {
     pattern: 'gradient',
     title: '120 FPS Animated Gradient'
   },
   {
-    pattern: 'checkerboard', 
+    pattern: 'checkerboard',
     title: '120 FPS Moving Checkerboard'
   },
   {
@@ -123,6 +151,8 @@ export const VideoCarousel: React.FC = () => {
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [videoFPS, setVideoFPS] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const handleFPSUpdate = (fps: number) => {
     setVideoFPS(fps);
@@ -130,40 +160,113 @@ export const VideoCarousel: React.FC = () => {
 
   const togglePlayPause = () => {
     setIsPlaying(!isPlaying);
+    setVideoError(null);
+  };
+
+  const handleVideoError = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    console.error('Video error:', e);
+    setVideoError('Failed to load video');
+  };
+
+  const handleVideoLoaded = () => {
+    console.log('Video loaded successfully');
+    setVideoError(null);
   };
 
   const nextVideo = () => {
     const nextIndex = (currentVideoIndex + 1) % sampleVideos.length;
     setCurrentVideoIndex(nextIndex);
     setVideoFPS(0);
+    setVideoError(null);
   };
 
   const previousVideo = () => {
     const prevIndex = currentVideoIndex === 0 ? sampleVideos.length - 1 : currentVideoIndex - 1;
     setCurrentVideoIndex(prevIndex);
     setVideoFPS(0);
+    setVideoError(null);
   };
 
   const currentVideo = sampleVideos[currentVideoIndex];
 
+  // Handle video file playback
+  useEffect(() => {
+    if (currentVideo.pattern === 'file' && videoRef.current) {
+      if (isPlaying) {
+        // Add a small delay to ensure video is ready
+        setTimeout(() => {
+          if (videoRef.current) {
+            videoRef.current.play().catch(error => {
+              console.error('Video play error:', error);
+              setVideoError('Failed to play video');
+            });
+          }
+        }, 100);
+      } else {
+        videoRef.current.pause();
+      }
+    }
+  }, [isPlaying, currentVideo]);
+
+  // Reset video when switching to a new video
+  useEffect(() => {
+    if (currentVideo.pattern === 'file' && videoRef.current) {
+      videoRef.current.currentTime = 0;
+      if (isPlaying) {
+        setTimeout(() => {
+          if (videoRef.current) {
+            videoRef.current.play().catch(error => {
+              console.error('Video play error after switch:', error);
+              setVideoError('Failed to play video after switch');
+            });
+          }
+        }, 200); // Longer delay after switching
+      }
+    }
+  }, [currentVideoIndex, currentVideo, isPlaying]);
+
   return (
     <CarouselContainer>
       <VideoElement>
-        <CanvasVideo
-          isPlaying={isPlaying}
-          onFPSUpdate={handleFPSUpdate}
-          pattern={currentVideo.pattern}
-        />
+        {currentVideo.pattern === 'file' ? (
+          <>
+            <VideoFile
+              ref={videoRef}
+              src={currentVideo.src}
+              playsInline
+              muted
+              loop
+              onLoadedData={handleVideoLoaded}
+              onError={handleVideoError}
+              preload="auto"
+            />
+            {videoError && (
+              <VideoError>
+                <div>❌ Video Error</div>
+                <div>{videoError}</div>
+                <div style={{ fontSize: '12px', marginTop: '10px' }}>
+                  Path: {currentVideo.src}
+                </div>
+              </VideoError>
+            )}
+          </>
+        ) : (
+          <CanvasVideo
+            isPlaying={isPlaying}
+            onFPSUpdate={handleFPSUpdate}
+            pattern={currentVideo.pattern}
+          />
+        )}
       </VideoElement>
-      
+
       <PlayPauseButton onClick={togglePlayPause}>
         {isPlaying ? '⏸️' : '▶️'}
       </PlayPauseButton>
-      
+
       <NavigationButton direction="left" onClick={previousVideo}>
         ‹
       </NavigationButton>
-      
+
       <NavigationButton direction="right" onClick={nextVideo}>
         ›
       </NavigationButton>
@@ -173,8 +276,15 @@ export const VideoCarousel: React.FC = () => {
       </VideoCounter>
 
       <VideoInfo>
-        <div>Pattern: {currentVideo.title}</div>
-        <div>Render FPS: {videoFPS}</div>
+        <div>{currentVideo.title}</div>
+        {currentVideo.pattern !== 'file' ? (
+          <div>Render FPS: {videoFPS}</div>
+        ) : (
+          <>
+            <div>Type: Real Video</div>
+            {videoError && <div style={{ color: '#ff6b6b' }}>Error: {videoError}</div>}
+          </>
+        )}
         <div>Status: {isPlaying ? 'Playing' : 'Paused'}</div>
       </VideoInfo>
 
